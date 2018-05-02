@@ -136,7 +136,7 @@ export class FacetValueSuggestionsProvider implements IFacetValueSuggestionsProv
     return {
       field: <string>this.options.field,
       ignoreAccents: true,
-      maximumNumberOfValues: 3,
+      maximumNumberOfValues: 10,
       queryOverride: queryToExecute
     };
   }
