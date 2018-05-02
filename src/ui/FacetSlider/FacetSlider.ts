@@ -402,6 +402,17 @@ export class FacetSlider extends Component {
     );
   }
 
+  public isCurrentlyDisplayed() {
+    if (!$$(this.element).isVisible()) {
+      return false;
+    }
+
+    if ($$(this.element).hasClass('coveo-disabled-empty')) {
+      return false;
+    }
+    return true;
+  }
+
   public createDom() {
     this.facetHeader = new FacetHeader({
       field: <string>this.options.field,
@@ -412,11 +423,6 @@ export class FacetSlider extends Component {
       facetSlider: this
     });
     this.element.appendChild(this.facetHeader.build());
-  }
-
-  public disable() {
-    super.disable();
-    $$(this.element).addClass('coveo-disabled-empty');
   }
 
   /**
@@ -990,21 +996,27 @@ export class FacetSlider extends Component {
   }
 
   private updateAppearanceDependingOnState(sliding = false) {
-    if (this.isEmpty && !this.isActive() && !sliding) {
-      $$(this.element).addClass('coveo-disabled-empty');
-    } else {
-      $$(this.element).removeClass('coveo-disabled-empty');
-      $$(this.facetHeader.eraserElement).toggle(this.isActive());
-    }
-    if (!this.isActive() && !sliding) {
-      $$(this.element).addClass('coveo-disabled');
-    } else {
-      $$(this.element).removeClass('coveo-disabled');
-    }
+    // Defer the visual update so that we can execute it after the current call stack has resolved.
+    // Since this component is closely linked to DOM size calculation (width), this allows to cover some corner cases
+    // where the component would be visually hidden, leading to incorrect width calculation.
+    // For example, first query placeholder animation hiding the component, or switching between different tabs would affect the calculation otherwise.
+    Defer.defer(() => {
+      if (this.isEmpty && !this.isActive() && !sliding) {
+        $$(this.element).addClass('coveo-disabled-empty');
+      } else {
+        $$(this.element).removeClass('coveo-disabled-empty');
+        $$(this.facetHeader.eraserElement).toggle(this.isActive());
+      }
+      if (!this.isActive() && !sliding) {
+        $$(this.element).addClass('coveo-disabled');
+      } else {
+        $$(this.element).removeClass('coveo-disabled');
+      }
 
-    if (this.isActive() && this.slider) {
-      this.slider.onMoving();
-    }
+      if (this.isActive() && this.slider) {
+        this.slider.onMoving();
+      }
+    });
   }
 
   private handleNuke() {

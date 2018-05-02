@@ -94,6 +94,9 @@ lazyFacetSlider();
 import { lazyFieldSuggestions } from './ui/FieldSuggestions/LazyFieldSuggestions';
 lazyFieldSuggestions();
 
+import { lazyFacetValueSuggestions } from './ui/FacetValueSuggestions/LazyFacetValueSuggestions';
+lazyFacetValueSuggestions();
+
 import { lazyFieldTable } from './ui/FieldTable/LazyFieldTable';
 lazyFieldTable();
 
@@ -159,6 +162,9 @@ quickviewRegisterFields();
 
 import { lazyRecommendation } from './ui/Recommendation/LazyRecommendation';
 lazyRecommendation();
+
+import { lazyResultActionsMenu } from './ui/ResultActions/LazyResultActionsMenu';
+lazyResultActionsMenu();
 
 import { lazyResultAttachment } from './ui/ResultAttachments/LazyResultAttachments';
 lazyResultAttachment();

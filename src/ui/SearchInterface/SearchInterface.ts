@@ -32,16 +32,18 @@ import { ResponsiveComponents } from '../ResponsiveComponents/ResponsiveComponen
 import { Context, IPipelineContextProvider } from '../PipelineContext/PipelineGlobalExports';
 import { InitializationPlaceholder } from '../Base/InitializationPlaceholder';
 import { Debug } from '../Debug/Debug';
+import { FacetValueStateHandler } from './FacetValueStateHandler';
 import RelevanceInspectorModule = require('../RelevanceInspector/RelevanceInspector');
 
 import * as fastclick from 'fastclick';
 import * as jstz from 'jstimezonedetect';
-import * as _ from 'underscore';
 
 import 'styling/Globals';
 import 'styling/_SearchInterface';
 import 'styling/_SearchModalBox';
 import 'styling/_SearchButton';
+import { each, indexOf, isEmpty, chain, any, find, partition, first, tail } from 'underscore';
+import { FacetColumnAutoLayoutAdjustment } from './FacetColumnAutoLayoutAdjustment';
 
 export interface ISearchInterfaceOptions {
   enableHistory?: boolean;
@@ -309,7 +311,6 @@ export class SearchInterface extends RootComponent implements IComponentBindings
      * It also modifies the {@link IQuery.allowQueriesWithoutKeywords} query parameter.
      *
      * Default value is `true`
-     * @notSupportedIn salesforcefree
      */
     allowQueriesWithoutKeywords: ComponentOptions.buildBooleanOption({ defaultValue: true }),
     endpoint: ComponentOptions.buildCustomOption(
@@ -415,6 +416,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
   };
 
   public static SMALL_INTERFACE_CLASS_NAME = 'coveo-small-search-interface';
+
   public root: HTMLElement;
   public queryStateModel: QueryStateModel;
   public componentStateModel: ComponentStateModel;
@@ -430,6 +432,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
   public isResultsPerPageModifiedByPipeline = false;
 
   private attachedComponents: { [type: string]: BaseComponent[] };
+  private facetValueStateHandler: FacetValueStateHandler;
   private queryPipelineConfigurationForResultsPerPage: number;
   private relevanceInspector: RelevanceInspectorModule.RelevanceInspector;
 
@@ -468,6 +471,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     this.componentOptionsModel = new ComponentOptionsModel(element);
     this.usageAnalytics = this.initializeAnalytics();
     this.queryController = new QueryController(element, this.options, this.usageAnalytics, this);
+    this.facetValueStateHandler = new FacetValueStateHandler((componentId: string) => this.getComponents(componentId));
     new SentryLogger(this.queryController);
 
     const eventName = this.queryStateModel.getEventName(Model.eventTypes.preprocess);
@@ -475,8 +479,11 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     $$(this.element).on(QueryEvents.buildingQuery, (e, args) => this.handleBuildingQuery(args));
     $$(this.element).on(QueryEvents.querySuccess, (e, args) => this.handleQuerySuccess(args));
     $$(this.element).on(QueryEvents.queryError, (e, args) => this.handleQueryError(args));
+    $$(this.element).on(InitializationEvents.afterComponentsInitialization, () => this.handleAfterComponentsInitialization());
     const debugChanged = this.queryStateModel.getEventName(Model.eventTypes.changeOne + QueryStateModel.attributesEnum.debug);
     $$(this.element).on(debugChanged, (e, args: IAttributeChangedEventArg) => this.handleDebugModeChange(args));
+
+    this.queryStateModel.registerNewAttribute(QueryStateModel.attributesEnum.fv, {});
 
     if (this.options.enableHistory) {
       if (!this.options.useLocalStorageForHistory) {
@@ -486,7 +493,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
       }
     } else {
       $$(this.element).on(InitializationEvents.restoreHistoryState, () =>
-        this.queryStateModel.setMultiple(this.queryStateModel.defaultAttributes)
+        this.queryStateModel.setMultiple({ ...this.queryStateModel.defaultAttributes })
       );
     }
 
@@ -533,7 +540,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
    */
   public detachComponent(type: string, component: BaseComponent) {
     const components = this.getComponents(type);
-    const index = _.indexOf(components, component);
+    const index = indexOf(components, component);
     if (index > -1) {
       components.splice(index, 1);
     }
@@ -578,12 +585,12 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     } else {
       const pipelines = this.getComponents<IPipelineContextProvider>('PipelineContext');
 
-      if (pipelines && !_.isEmpty(pipelines)) {
-        const contextMerged = _.chain(pipelines)
+      if (pipelines && !isEmpty(pipelines)) {
+        const contextMerged = chain(pipelines)
           .map(pipeline => pipeline.getContext())
           .reduce((memo, context) => ({ ...memo, ...context }), {})
           .value();
-        if (!_.isEmpty(contextMerged)) {
+        if (!isEmpty(contextMerged)) {
           ret = contextMerged;
         }
       }
@@ -649,7 +656,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     }
   }
 
-  private handlePreprocessQueryStateModel(args: any) {
+  private handlePreprocessQueryStateModel(args: Record<string, any>) {
     const tgFromModel = this.queryStateModel.get(QueryStateModel.attributesEnum.tg);
     const tFromModel = this.queryStateModel.get(QueryStateModel.attributesEnum.t);
 
@@ -681,6 +688,12 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     if (args && args.quickview !== undefined) {
       args.quickview = this.getQuickview(args.quickview);
     }
+
+    // `fv:` states are intended to be redirected and used on a standard Search Interface,
+    // else the state gets transformed to `hd` before the redirection.
+    if (args && args.fv && !(this instanceof StandaloneSearchInterface)) {
+      this.facetValueStateHandler.handleFacetValueState(args);
+    }
   }
 
   private getTabGroupId(tabGroupId: string) {
@@ -690,7 +703,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
       // check if the tabgroup is correct
       if (
         tabGroupId != QueryStateModel.defaultAttributes.tg &&
-        _.any(tabGroups, (tabGroup: any) => !tabGroup.disabled && tabGroupId == tabGroup.options.id)
+        any(tabGroups, (tabGroup: any) => !tabGroup.disabled && tabGroupId == tabGroup.options.id)
       ) {
         return tabGroupId;
       }
@@ -711,16 +724,16 @@ export class SearchInterface extends RootComponent implements IComponentBindings
         // if has a tabGroup
         if (tabGroupId != QueryStateModel.defaultAttributes.tg) {
           const tabGroups = this.getComponents<any>(tabGroupRef.ID);
-          const tabGroup = _.find(tabGroups, (tabGroup: any) => tabGroupId == tabGroup.options.id);
+          const tabGroup = find(tabGroups, (tabGroup: any) => tabGroupId == tabGroup.options.id);
           // check if the tabgroup contain this tab
           if (
             tabId != QueryStateModel.defaultAttributes.t &&
-            _.any(tabs, (tab: any) => tabId == tab.options.id && tabGroup.isElementIncludedInTabGroup(tab.element))
+            any(tabs, (tab: any) => tabId == tab.options.id && tabGroup.isElementIncludedInTabGroup(tab.element))
           ) {
             return tabId;
           }
           // select the first tab in the tabGroup
-          const tab = _.find(tabs, (tab: any) => tabGroup.isElementIncludedInTabGroup(tab.element));
+          const tab = find(tabs, (tab: any) => tabGroup.isElementIncludedInTabGroup(tab.element));
           if (tab != null) {
             return tab.options.id;
           }
@@ -728,7 +741,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
         }
       }
       // check if the tab is correct
-      if (tabId != QueryStateModel.defaultAttributes.t && _.any(tabs, (tab: any) => tabId == tab.options.id)) {
+      if (tabId != QueryStateModel.defaultAttributes.t && any(tabs, (tab: any) => tabId == tab.options.id)) {
         return tabId;
       }
       // select the first tab
@@ -748,13 +761,13 @@ export class SearchInterface extends RootComponent implements IComponentBindings
       if (tabRef) {
         if (tabId != QueryStateModel.defaultAttributes.t) {
           const tabs = this.getComponents<any>(tabRef.ID);
-          const tab = _.find(tabs, (tab: any) => tabId == tab.options.id);
+          const tab = find(tabs, (tab: any) => tabId == tab.options.id);
           const sortCriteria = tab.options.sort;
 
           // check if the tab contain this sort
           if (
             sortId != QueryStateModel.defaultAttributes.sort &&
-            _.any(sorts, (sort: any) => tab.isElementIncludedInTab(sort.element) && sort.match(sortId))
+            any(sorts, (sort: any) => tab.isElementIncludedInTab(sort.element) && sort.match(sortId))
           ) {
             return sortId;
           } else if (sortCriteria != null) {
@@ -762,7 +775,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
             return sortCriteria.toString();
           }
           // select the first sort in the tab
-          const sort = _.find(sorts, (sort: any) => tab.isElementIncludedInTab(sort.element));
+          const sort = find(sorts, (sort: any) => tab.isElementIncludedInTab(sort.element));
           if (sort != null) {
             return sort.options.sortCriteria[0].toString();
           }
@@ -770,7 +783,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
         }
       }
       // check if the sort is correct
-      if (sortId != QueryStateModel.defaultAttributes.sort && _.any(sorts, (sort: any) => sort.match(sortId))) {
+      if (sortId != QueryStateModel.defaultAttributes.sort && any(sorts, (sort: any) => sort.match(sortId))) {
         return sortId;
       }
       // select the first sort
@@ -785,7 +798,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     const quickviewRef = BaseComponent.getComponentRef('Quickview');
     if (quickviewRef) {
       const quickviews = this.getComponents<any>(quickviewRef.ID);
-      if (_.any(quickviews, (quickview: any) => quickview.getHashId() == quickviewId)) {
+      if (any(quickviews, (quickview: any) => quickview.getHashId() == quickviewId)) {
         return quickviewId;
       }
     }
@@ -797,14 +810,14 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     if (quickviewRef) {
       const quickviews = this.getComponents<any>(quickviewRef.ID);
       if (args.value != '') {
-        const quickviewsPartition = _.partition(quickviews, quickview => quickview.getHashId() == args.value);
+        const quickviewsPartition = partition(quickviews, quickview => quickview.getHashId() == args.value);
         if (quickviewsPartition[0].length != 0) {
-          _.first(quickviewsPartition[0]).open();
-          _.forEach(_.tail(quickviewsPartition[0]), quickview => quickview.close());
+          first(quickviewsPartition[0]).open();
+          each(tail(quickviewsPartition[0]), quickview => quickview.close());
         }
-        _.forEach(quickviewsPartition[1], quickview => quickview.close());
+        each(quickviewsPartition[1], quickview => quickview.close());
       } else {
-        _.forEach(quickviews, quickview => {
+        each(quickviews, quickview => {
           quickview.close();
         });
       }
@@ -901,6 +914,16 @@ export class SearchInterface extends RootComponent implements IComponentBindings
     }
   }
 
+  private handleAfterComponentsInitialization() {
+    each(this.attachedComponents, components => {
+      components.forEach(component => {
+        if (FacetColumnAutoLayoutAdjustment.isAutoLayoutAdjustable(component)) {
+          FacetColumnAutoLayoutAdjustment.initializeAutoLayoutAdjustment(this.element, component);
+        }
+      });
+    });
+  }
+
   private toggleSectionState(cssClass: string, toggle = true) {
     const facetSection = $$(this.element).find('.coveo-facet-column');
     const resultsSection = $$(this.element).find('.coveo-results-column');
@@ -921,7 +944,7 @@ export class SearchInterface extends RootComponent implements IComponentBindings
       $$(recommendationSection).toggleClass(cssClass, toggle);
     }
     if (facetSearchs && facetSearchs.length > 0) {
-      _.each(facetSearchs, facetSearch => {
+      each(facetSearchs, facetSearch => {
         $$(facetSearch).toggleClass(cssClass, toggle && !this.queryStateModel.atLeastOneFacetIsActive());
       });
     }

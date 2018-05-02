@@ -283,6 +283,9 @@ SearchAlertsTest();
 import { SearchButtonTest } from './ui/SearchButtonTest';
 SearchButtonTest();
 
+import { FacetValueStateHandlerTest } from './ui/FacetValueStateHandlerTest';
+FacetValueStateHandlerTest();
+
 import { SearchInterfaceTest } from './ui/SearchInterfaceTest';
 SearchInterfaceTest();
 
@@ -318,6 +321,9 @@ TriggersTest();
 
 import { ValueElementRendererTest } from './ui/ValueElementRendererTest';
 ValueElementRendererTest();
+
+import { ResultActionsMenuTest } from './ui/ResultActionsMenuTest';
+ResultActionsMenuTest()
 
 import { ResultsPerPageTest } from './ui/ResultsPerPageTest';
 ResultsPerPageTest();
@@ -502,6 +508,18 @@ UrlUtilsTest();
 import { AccessTokenTest } from './rest/AccessTokenTest';
 AccessTokenTest();
 
+import { FacetValueSuggestionsTest } from './ui/FacetValueSuggestionsTest';
+FacetValueSuggestionsTest();
+
+import { FacetValueSuggestionsProviderTest } from './ui/FacetValueSuggestionsProviderTest';
+FacetValueSuggestionsProviderTest();
+
+import { SuggestionsCacheTest } from './misc/SuggestionsCacheTest';
+SuggestionsCacheTest();
+
+import { FacetColumnAutoLayoutAdjustmentTest } from './ui/FacetColumnAutoLayoutAdjustmentTest';
+FacetColumnAutoLayoutAdjustmentTest();
+
 import { AgGridTest } from './ui/RelevanceInspector/AgGridTest';
 AgGridTest();
 
@@ -567,3 +585,30 @@ FieldValuesRendererTest();
 
 import { MetaDataTableTest } from './ui/RelevanceInspector/MetaDataTableTest';
 MetaDataTableTest();
+
+import { QueryUtilsTest } from './utils/QueryUtilsTest';
+QueryUtilsTest();
+
+import { QuickviewDocumentWordTest } from './ui/QuickviewDocumentWordTest';
+QuickviewDocumentWordTest();
+
+import { QuickviewDocumentIframeTest } from './ui/QuickviewDocumentIframeTest';
+QuickviewDocumentIframeTest();
+
+import { QuickviewDocumentWordsTest } from './ui/QuickviewDocumentWordsTest';
+QuickviewDocumentWordsTest();
+
+import { QuickviewDocumentWordColorTest } from './ui/QuickviewDocumentWordColorTest';
+QuickviewDocumentWordColorTest();
+
+import { QuickviewDocumentPreviewBarTest } from './ui/QuickviewDocumentPreviewBarTest';
+QuickviewDocumentPreviewBarTest();
+
+import { QuickviewDocumentHeaderTest } from './ui/QuickviewDocumentHeaderTest';
+QuickviewDocumentHeaderTest();
+
+import { QuickviewDocumentWordButtonTest } from './ui/QuickviewDocumentWordButtonTest';
+QuickviewDocumentWordButtonTest();
+
+import { QuickviewDocumentTest } from './ui/QuickviewDocumentTest';
+QuickviewDocumentTest();

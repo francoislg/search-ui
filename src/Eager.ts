@@ -91,6 +91,9 @@ FacetSlider.doExport();
 import { FieldSuggestions } from './ui/FieldSuggestions/FieldSuggestions';
 FieldSuggestions.doExport();
 
+import { FacetValueSuggestions } from './ui/FacetValueSuggestions/FacetValueSuggestions';
+FacetValueSuggestions.doExport();
+
 import { FieldTable } from './ui/FieldTable/FieldTable';
 FieldTable.doExport();
 
@@ -164,6 +167,9 @@ Recommendation.doExport();
 
 import { ResultAttachments } from './ui/ResultAttachments/ResultAttachments';
 ResultAttachments.doExport();
+
+import { ResultActionsMenu } from './ui/ResultActions/ResultActionsMenu';
+ResultActionsMenu.doExport();
 
 import { ResultFolding } from './ui/ResultFolding/ResultFolding';
 ResultFolding.doExport();

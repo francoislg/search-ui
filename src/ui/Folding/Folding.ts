@@ -1,18 +1,18 @@
-import { IQueryResult } from '../../rest/QueryResult';
-import { Component } from '../Base/Component';
-import { SortCriteria } from '../Sort/SortCriteria';
-import { ComponentOptions, IFieldOption } from '../Base/ComponentOptions';
-import { IComponentBindings } from '../Base/ComponentBindings';
-import { Utils } from '../../utils/Utils';
-import { Assert } from '../../misc/Assert';
-import { QueryEvents, IBuildingQueryEventArgs, IPreprocessResultsEventArgs } from '../../events/QueryEvents';
-import { Initialization } from '../Base/Initialization';
-import { IQueryResults } from '../../rest/QueryResults';
-import { IQuery } from '../../rest/Query';
-import { $$ } from '../../utils/Dom';
-import { QueryBuilder } from '../Base/QueryBuilder';
-import * as _ from 'underscore';
+import { any, clone, each, map, sortBy, without } from 'underscore';
 import { exportGlobally } from '../../GlobalExports';
+import { IBuildingQueryEventArgs, IPreprocessResultsEventArgs, QueryEvents } from '../../events/QueryEvents';
+import { Assert } from '../../misc/Assert';
+import { IQuery } from '../../rest/Query';
+import { IQueryResult } from '../../rest/QueryResult';
+import { IQueryResults } from '../../rest/QueryResults';
+import { $$ } from '../../utils/Dom';
+import { Utils } from '../../utils/Utils';
+import { Component } from '../Base/Component';
+import { IComponentBindings } from '../Base/ComponentBindings';
+import { ComponentOptions, IFieldOption } from '../Base/ComponentOptions';
+import { Initialization } from '../Base/Initialization';
+import { QueryBuilder } from '../Base/QueryBuilder';
+import { SortCriteria } from '../Sort/SortCriteria';
 
 export interface IFoldingOptions {
   field?: IFieldOption;
@@ -141,8 +141,13 @@ export class Folding extends Component {
 
     /**
      * Specifies the sort criteria to apply to the top result and its child results (e.g., `date ascending`,
-     * `@myfield descending`, etc. [See
-     * Query Parameters - sortCriteria](https://developers.coveo.com/x/iwEv#QueryParameters-sortCriteriasortCriteria)).
+     * `@myfield descending`, etc.). See [Query Parameters - sortCriteria](https://developers.coveo.com/x/iwEv#QueryParameters-sortCriteriasortCriteria).
+     *
+     * This option works from the results returned by the index. This means that if only the three most relevant folded results are returned by the index
+     * and you choose to rearrange the folded results by date, then the three most relevant results will be rearranged by date,
+     * meaning that the first folded result is not necessarily the oldest or newest item.
+     *
+     * However, since clicking on the `Show More` button triggers a new query, you would receive new results based on the sort criteria of this option.
      *
      * **Example**
      * > If you are folding email results by conversation and you specify `date descending` as the `rearrange` value of
@@ -268,7 +273,7 @@ export class Folding extends Component {
       }
     };
 
-    _.each(queryResults, (queryResult: IQueryResult, i: number) => {
+    each(queryResults, (queryResult: IQueryResult, i: number) => {
       let resultNode = Folding.findUniqueId(rootNode.children, queryResult.uniqueId);
       // If he have no parent or is parent is him self, add it to the root
       if (queryResult.parentResult == null || queryResult.parentResult.uniqueId == queryResult.uniqueId) {
@@ -287,7 +292,7 @@ export class Folding extends Component {
         if (resultNode != null) {
           resultNode.score = Math.min(i, resultNode.score);
           // Remove himself from his parent because it will be added in his parent. This allowed to remove duplicate.
-          resultNode.parent.children = _.without(resultNode.parent.children, resultNode);
+          resultNode.parent.children = without(resultNode.parent.children, resultNode);
         } else {
           resultNode = {
             result: queryResult,
@@ -319,7 +324,7 @@ export class Folding extends Component {
     });
     const rootResult = Folding.resultNodeToQueryResult(rootNode);
     // Remove the root from all results
-    _.each(rootResult.attachments, attachment => (attachment.parentResult = null));
+    each(rootResult.attachments, attachment => (attachment.parentResult = null));
     return rootResult.attachments;
   }
 
@@ -337,6 +342,7 @@ export class Folding extends Component {
     const topResult = results.shift();
     // All other the results are childResults
     topResult.childResults = results;
+
     return topResult;
   }
 
@@ -348,7 +354,7 @@ export class Folding extends Component {
   // Convert ResultNode to QueryResult
   private static resultNodeToQueryResult(resultNode: IResultNode): IQueryResult {
     const result = resultNode.result;
-    result.attachments = _.map(_.sortBy<IResultNode>(resultNode.children, 'score'), Folding.resultNodeToQueryResult);
+    result.attachments = map(sortBy<IResultNode>(resultNode.children, 'score'), Folding.resultNodeToQueryResult);
     result.parentResult = resultNode.parent != null ? resultNode.parent.result : null;
     return result;
   }
@@ -414,12 +420,35 @@ export class Folding extends Component {
     const queryResults = data.results;
 
     const getResult: (result: IQueryResult) => IQueryResult = this.options.getResult || Folding.defaultGetResult;
-    queryResults.results = _.map(queryResults.results, getResult);
+    queryResults.results = map(queryResults.results, getResult);
+
+    if (this.options.rearrange) {
+      queryResults.results.forEach(result => {
+        result.childResults = sortBy(result.childResults, result => Utils.getFieldValue(result, this.options.rearrange.sort));
+        if (this.shouldBeReversed(result.childResults)) {
+          result.childResults = result.childResults.reverse();
+        }
+      });
+    }
+
     this.addLoadMoreHandler(<IQueryResult[]>queryResults.results, data.query);
   }
 
+  private shouldBeReversed(childResults: IQueryResult[]) {
+    if (this.options.rearrange.direction == 'ascending') {
+      return false;
+    }
+    const childMissingSortByValue = any(childResults, childResult => {
+      return Utils.isNullOrUndefined(Utils.getFieldValue(childResult, this.options.rearrange.sort));
+    });
+    if (childMissingSortByValue) {
+      return false;
+    }
+    return true;
+  }
+
   private addLoadMoreHandler(results: IQueryResult[], originalQuery: IQuery) {
-    return _.map(results, result => {
+    return map(results, result => {
       if (this.options.enableExpand && !Utils.isNullOrUndefined(Utils.getFieldValue(result, <string>this.options.field))) {
         result.moreResults = () => {
           return this.moreResults(result, originalQuery);
@@ -430,7 +459,7 @@ export class Folding extends Component {
   }
 
   private moreResults(result: IQueryResult, originalQuery: IQuery): Promise<IQueryResult[]> {
-    const query = _.clone(originalQuery);
+    const query = clone(originalQuery);
     const builder = new QueryBuilder();
 
     query.numberOfResults = this.options.maximumExpandedResults;
